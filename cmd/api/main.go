@@ -1,9 +1,17 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"log"
+	"mauk14.library/internal/data"
 	"net/http"
 	"os"
 	"time"
@@ -32,6 +40,38 @@ func main() {
 
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := clientMongoDb(os.Getenv("MONGODB_URI"))
+
+	defer func(client *mongo.Client, ctx context.Context) {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(client, ctx)
+
+	db := client.Database("Library")
+	books := db.Collection("books")
+
+	book := data.Book{ID: 1, Title: "zdarova", Author: "Erzhanat", CreatedAt: time.Now(), Year: 2023, Size: 100, Version: uuid.New()}
+
+	one, err := books.InsertOne(ctx, book)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var result data.Book
+	err = books.FindOne(ctx, bson.D{{"_id", one.InsertedID}}).Decode(&result)
+
+	jsonData, err := json.MarshalIndent(result, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%s\n", jsonData)
+
 	app := &application{
 		config: cfg,
 		logger: logger,
@@ -46,7 +86,29 @@ func main() {
 	}
 
 	logger.Printf("starting %s server on %s", cfg.env, srv.Addr)
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	logger.Fatal(err)
 
+}
+
+func clientMongoDb(uri string) (*mongo.Client, error) {
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	defer cancel()
+
+	err = client.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
