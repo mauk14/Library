@@ -2,11 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/google/uuid"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -18,8 +15,9 @@ import (
 )
 
 type config struct {
-	port int
-	env  string
+	port    int
+	env     string
+	isMongo bool
 }
 
 const (
@@ -29,6 +27,7 @@ const (
 type application struct {
 	config config
 	logger *log.Logger
+	models data.Models
 }
 
 func main() {
@@ -36,6 +35,9 @@ func main() {
 
 	flag.IntVar(&cfg.port, "port", 4000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
+
+	flag.BoolVar(&cfg.isMongo, "mongo", false, "Mongo use or not?")
+
 	flag.Parse()
 
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
@@ -43,38 +45,29 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client, err := clientMongoDb(os.Getenv("MONGODB_URI"))
+	var db data.DB
 
-	defer func(client *mongo.Client, ctx context.Context) {
-		err := client.Disconnect(ctx)
+	if cfg.isMongo {
+		client, err := clientMongoDb(os.Getenv("MONGODB_URI"))
+
 		if err != nil {
-			log.Fatal(err)
+			logger.Fatal(err)
 		}
-	}(client, ctx)
 
-	db := client.Database("Library")
-	books := db.Collection("books")
+		defer func(client *mongo.Client, ctx context.Context) {
+			err := client.Disconnect(ctx)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}(client, ctx)
 
-	book := data.Book{ID: 1, Title: "zdarova", Author: "Erzhanat", CreatedAt: time.Now(), Year: 2023, Size: 100, Version: uuid.New()}
-
-	one, err := books.InsertOne(ctx, book)
-	if err != nil {
-		log.Fatal(err)
-		return
+		db = data.NewMongo(client, "Library")
 	}
-
-	var result data.Book
-	err = books.FindOne(ctx, bson.D{{"_id", one.InsertedID}}).Decode(&result)
-
-	jsonData, err := json.MarshalIndent(result, "", "    ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("%s\n", jsonData)
 
 	app := &application{
 		config: cfg,
 		logger: logger,
+		models: data.NewModels(db),
 	}
 
 	srv := &http.Server{
@@ -86,7 +79,7 @@ func main() {
 	}
 
 	logger.Printf("starting %s server on %s", cfg.env, srv.Addr)
-	err = srv.ListenAndServe()
+	err := srv.ListenAndServe()
 	logger.Fatal(err)
 
 }

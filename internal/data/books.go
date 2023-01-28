@@ -1,7 +1,10 @@
 package data
 
 import (
+	"context"
+	"errors"
 	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/mongo"
 	"mauk14.library/internal/validator"
 	"time"
 )
@@ -15,6 +18,89 @@ type Book struct {
 	Size      Size      `json:"-"`
 	Genres    []string  `json:"genres,omitempty"`
 	Version   uuid.UUID `json:"version"`
+}
+
+type BookModel struct {
+	DB DB
+}
+
+func (b *BookModel) Insert(book *Book) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var err error
+
+	id, err := b.DB.GetLastId(ctx, "", "books")
+
+	if err != nil {
+		return err
+	}
+
+	book.ID = id + 1
+
+	return b.DB.Insert(ctx, "", "books", book)
+
+}
+
+func (m *BookModel) Get(id int64) (*Book, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if id < 1 {
+		return nil, ErrRecordNotFound
+	}
+
+	var book Book
+	var result interface{}
+
+	result, err := m.DB.Get(ctx, "", id, "books")
+	if err != nil {
+		switch {
+		case errors.Is(err, mongo.ErrNoDocuments):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+
+	}
+
+	switch result.(type) {
+	case Book:
+		book = result.(Book)
+	}
+
+	return &book, nil
+
+}
+
+func (m *BookModel) Update(book *Book) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := m.DB.Update(ctx, "", book)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, mongo.ErrNoDocuments):
+			return ErrEditConflict
+		default:
+			return err
+		}
+	}
+	
+	return nil
+}
+
+func (m *BookModel) Delete(id int64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if id < 1 {
+		return ErrRecordNotFound
+	}
+
+	err := m.DB.Delete(ctx, "", id, "books")
+	return err
 }
 
 func ValidateBook(v *validator.Validator, Book *Book) {
