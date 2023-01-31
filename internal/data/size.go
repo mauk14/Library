@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var ErrInvalidRuntimeFormat = errors.New("invalid runtime format")
+var ErrInvalidSizeFormat = errors.New("invalid size format")
 
 type Size int32
 
@@ -24,18 +24,18 @@ func (r *Size) UnmarshalJSON(jsonValue []byte) error {
 
 	unquotedJSONValue, err := strconv.Unquote(string(jsonValue))
 	if err != nil {
-		return ErrInvalidRuntimeFormat
+		return ErrInvalidSizeFormat
 	}
 
 	parts := strings.Split(unquotedJSONValue, " ")
 
 	if len(parts) != 2 || parts[1] != "pages" {
-		return ErrInvalidRuntimeFormat
+		return ErrInvalidSizeFormat
 	}
 
 	i, err := strconv.ParseInt(parts[0], 10, 32)
 	if err != nil {
-		return ErrInvalidRuntimeFormat
+		return ErrInvalidSizeFormat
 	}
 
 	*r = Size(i)

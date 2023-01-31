@@ -28,8 +28,6 @@ func (b *BookModel) Insert(book *Book) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	var err error
-
 	id, err := b.DB.GetLastId(ctx, "", "books")
 
 	if err != nil {
@@ -37,6 +35,8 @@ func (b *BookModel) Insert(book *Book) error {
 	}
 
 	book.ID = id + 1
+	book.Version = uuid.New()
+	book.CreatedAt = time.Now()
 
 	return b.DB.Insert(ctx, "", "books", book)
 
@@ -87,7 +87,7 @@ func (m *BookModel) Update(book *Book) error {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -101,6 +101,17 @@ func (m *BookModel) Delete(id int64) error {
 
 	err := m.DB.Delete(ctx, "", id, "books")
 	return err
+}
+
+func (m *BookModel) GetAll(title string, author string, genres []string, filters Filters) ([]*Book, Metadata, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	opt := make(map[string]string)
+	opt["title"] = title
+	opt["author"] = author
+
+	return m.DB.GetAll(ctx, "", "books", opt, genres, filters)
+
 }
 
 func ValidateBook(v *validator.Validator, Book *Book) {

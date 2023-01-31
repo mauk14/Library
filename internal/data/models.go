@@ -11,9 +11,10 @@ var (
 
 type Models struct {
 	Books BookModel
+	Users UserModel
 }
 
 func NewModels(db DB) Models {
-	return Models{Books: BookModel{DB: db}}
+	return Models{Books: BookModel{DB: db}, Users: UserModel{DB: db}}
 
 }

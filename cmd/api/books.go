@@ -3,11 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"mauk14.library/internal/data"
 	"mauk14.library/internal/validator"
 	"net/http"
-	"time"
 )
 
 func (app *application) createBookHandler(w http.ResponseWriter, r *http.Request) {
@@ -26,13 +24,11 @@ func (app *application) createBookHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	book := &data.Book{
-		Title:     input.Title,
-		Year:      input.Year,
-		Author:    input.Author,
-		Size:      input.Size,
-		Genres:    input.Genres,
-		CreatedAt: time.Now(),
-		Version:   uuid.New(),
+		Title:  input.Title,
+		Year:   input.Year,
+		Author: input.Author,
+		Size:   input.Size,
+		Genres: input.Genres,
 	}
 
 	v := validator.New()
@@ -178,6 +174,43 @@ func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	err = app.writeJSON(w, http.StatusOK, envelope{"message": "book successfully deleted"}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+func (app *application) listMoviesHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Title  string
+		Author string
+		Genres []string
+		data.Filters
+	}
+
+	v := validator.New()
+	qs := r.URL.Query()
+
+	input.Title = app.readString(qs, "title", "")
+	input.Author = app.readString(qs, "author", "")
+	input.Genres = app.readCSV(qs, "genres", []string{})
+
+	input.Filters.Page = app.readInt(qs, "page", 1, v)
+	input.Filters.PageSize = app.readInt(qs, "page_size", 20, v)
+
+	input.Filters.Sort = app.readString(qs, "sort", "id")
+
+	input.Filters.SortSafelist = []string{"id", "title", "year", "size", "-id", "-title", "-year", "-size"}
+
+	if data.ValidateFilters(v, input.Filters); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+	books, metadata, err := app.models.Books.GetAll(input.Title, input.Author, input.Genres, input.Filters)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	err = app.writeJSON(w, http.StatusOK, envelope{"books": books, "metadata": metadata}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
