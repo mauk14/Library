@@ -53,7 +53,7 @@ func (m *BookModel) Get(id int64) (*Book, error) {
 	var book Book
 	var result interface{}
 
-	result, err := m.DB.Get(ctx, "", id, "books")
+	result, err := m.DB.Get(ctx, "", id, "books", "")
 	if err != nil {
 		switch {
 		case errors.Is(err, mongo.ErrNoDocuments):
@@ -99,7 +99,7 @@ func (m *BookModel) Delete(id int64) error {
 		return ErrRecordNotFound
 	}
 
-	err := m.DB.Delete(ctx, "", id, "books")
+	err := m.DB.Delete(ctx, "", id, "books", "")
 	return err
 }
 

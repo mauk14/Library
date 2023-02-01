@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
@@ -19,12 +20,24 @@ func NewMongo(client *mongo.Client, name string) *MongoDb {
 
 func (m *MongoDb) Insert(ctx context.Context, _ string, collection string, data interface{}) error {
 	coll := m.DB.Collection(collection)
+	switch data.(type) {
+	case *Token:
+		token := data.(*Token)
+		_, err := coll.InsertOne(ctx, bson.M{
+			"user_id": token.UserID,
+			"expiry":  token.Expiry,
+			"scope":   token.Scope,
+			"hash":    token.Hash,
+		})
+		return err
+	}
 	_, err := coll.InsertOne(ctx, data)
 	return err
 }
 
-func (m *MongoDb) Get(ctx context.Context, _ string, id interface{}, collection string) (interface{}, error) {
+func (m *MongoDb) Get(ctx context.Context, _ string, id interface{}, collection string, scope string) (interface{}, error) {
 	coll := m.DB.Collection(collection)
+
 	if collection == "books" {
 		var result Book
 
@@ -42,6 +55,35 @@ func (m *MongoDb) Get(ctx context.Context, _ string, id interface{}, collection 
 			return nil, err
 		}
 
+		return result, nil
+	} else if collection == "tokens" {
+		var result User
+		var token Token
+		var res bson.M
+
+		opt := options.FindOne().SetProjection(bson.D{{"_id", 0}, {"user_id", 1}})
+		err := coll.FindOne(ctx, bson.M{"hash": id, "scope": scope}, opt).Decode(&res)
+
+		jsonData, err := json.MarshalIndent(res, "", "    ")
+		if err != nil {
+			return nil, err
+		}
+
+		err = json.Unmarshal(jsonData, &token)
+		if err != nil {
+			return nil, err
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		coll = m.DB.Collection("users")
+		err = coll.FindOne(ctx, bson.M{"id": token.UserID}).Decode(&result)
+
+		if err != nil {
+			return nil, err
+		}
 		return result, nil
 	}
 
@@ -171,8 +213,17 @@ func (m *MongoDb) Update(ctx context.Context, _ string, data interface{}) error 
 
 }
 
-func (m *MongoDb) Delete(ctx context.Context, _ string, id int64, collection string) error {
+func (m *MongoDb) Delete(ctx context.Context, _ string, id int64, collection string, scope string) error {
+
 	coll := m.DB.Collection(collection)
+	if collection == "tokens" {
+		_, err := coll.DeleteOne(ctx, bson.D{{"user_id", id}, {"scope", scope}})
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
 	result, err := coll.DeleteOne(ctx, bson.D{{"id", id}})
 	if err != nil {
 		return err

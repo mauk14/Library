@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"github.com/google/uuid"
@@ -121,7 +122,7 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 	var user User
 	var result interface{}
 
-	result, err := m.DB.Get(ctx, "", email, "users")
+	result, err := m.DB.Get(ctx, "", email, "users", "")
 	if err != nil {
 		switch {
 		case errors.Is(err, mongo.ErrNoDocuments):
@@ -153,4 +154,27 @@ func (m *UserModel) Update(user *User) error {
 	}
 
 	return nil
+}
+
+func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
+	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+	var user User
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	result, err := m.DB.Get(ctx, "", tokenHash, "tokens", tokenScope)
+	if err != nil {
+		switch {
+		case errors.Is(err, mongo.ErrNoDocuments):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+
+	}
+
+	user = result.(User)
+
+	return &user, nil
 }
