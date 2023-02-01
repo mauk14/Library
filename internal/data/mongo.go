@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"time"
 )
 
 type MongoDb struct {
@@ -30,6 +32,18 @@ func (m *MongoDb) Insert(ctx context.Context, _ string, collection string, data 
 			"hash":    token.Hash,
 		})
 		return err
+	case *User:
+		user := data.(*User)
+		_, err := coll.InsertOne(ctx, bson.M{
+			"id":         user.ID,
+			"created_at": user.CreatedAt,
+			"password":   user.Password.hash,
+			"email":      user.Email,
+			"activated":  user.Activated,
+			"version":    user.Version,
+		})
+		fmt.Println(err)
+		return err
 	}
 	_, err := coll.InsertOne(ctx, data)
 	return err
@@ -49,7 +63,32 @@ func (m *MongoDb) Get(ctx context.Context, _ string, id interface{}, collection 
 		return result, nil
 	} else if collection == "users" {
 		var result User
+		input := struct {
+			ID        int64     `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			Name      string    `json:"name"`
+			Email     string    `json:"email"`
+			Password  []byte    `json:"-"`
+			Activated bool      `json:"activated"`
+			Version   uuid.UUID `json:"-"`
+		}{}
 
+		switch id.(type) {
+		case string:
+			err := coll.FindOne(ctx, bson.D{{"email", id}}).Decode(&input)
+			if err != nil {
+				return nil, err
+			}
+			result.ID = input.ID
+			result.CreatedAt = input.CreatedAt
+			result.Name = input.Name
+			result.Email = input.Email
+			result.Password.hash = input.Password
+			result.Activated = input.Activated
+			result.Version = input.Version
+
+			return result, nil
+		}
 		err := coll.FindOne(ctx, bson.D{{"id", id}}).Decode(&result)
 		if err != nil {
 			return nil, err
@@ -57,12 +96,23 @@ func (m *MongoDb) Get(ctx context.Context, _ string, id interface{}, collection 
 
 		return result, nil
 	} else if collection == "tokens" {
+		input := struct {
+			ID        int64     `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			Name      string    `json:"name"`
+			Email     string    `json:"email"`
+			Password  []byte    `json:"-"`
+			Activated bool      `json:"activated"`
+			Version   uuid.UUID `json:"-"`
+		}{}
 		var result User
 		var token Token
 		var res bson.M
 
 		opt := options.FindOne().SetProjection(bson.D{{"_id", 0}, {"user_id", 1}})
 		err := coll.FindOne(ctx, bson.M{"hash": id, "scope": scope}, opt).Decode(&res)
+		//fmt.Println(res)
+		//fmt.Println(err)
 
 		jsonData, err := json.MarshalIndent(res, "", "    ")
 		if err != nil {
@@ -70,16 +120,23 @@ func (m *MongoDb) Get(ctx context.Context, _ string, id interface{}, collection 
 		}
 
 		err = json.Unmarshal(jsonData, &token)
+		//fmt.Println(err)
 		if err != nil {
 			return nil, err
 		}
-
-		if err != nil {
-			return nil, err
-		}
+		//fmt.Println(token.UserID)
 
 		coll = m.DB.Collection("users")
-		err = coll.FindOne(ctx, bson.M{"id": token.UserID}).Decode(&result)
+		err = coll.FindOne(ctx, bson.M{"id": token.UserID}).Decode(&input)
+		//fmt.Println(err)
+
+		result.ID = input.ID
+		result.CreatedAt = input.CreatedAt
+		result.Name = input.Name
+		result.Email = input.Email
+		result.Password.hash = input.Password
+		result.Activated = input.Activated
+		result.Version = input.Version
 
 		if err != nil {
 			return nil, err
@@ -103,12 +160,20 @@ func (m *MongoDb) GetLastId(ctx context.Context, _ string, collection string) (i
 		}
 		return result.ID, nil
 	} else if collection == "users" {
-		var result User
-		err := coll.FindOne(ctx, filter, opts).Decode(&result)
+		input := struct {
+			ID        int64     `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			Name      string    `json:"name"`
+			Email     string    `json:"email"`
+			Password  []byte    `json:"-"`
+			Activated bool      `json:"activated"`
+			Version   uuid.UUID `json:"-"`
+		}{}
+		err := coll.FindOne(ctx, filter, opts).Decode(&input)
 		if err != nil {
 			return 0, err
 		}
-		return result.ID, nil
+		return input.ID, nil
 	}
 	return 0, errors.New("No collections in database")
 
