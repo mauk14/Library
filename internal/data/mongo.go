@@ -41,8 +41,25 @@ func (m *MongoDb) Insert(ctx context.Context, _ string, collection string, data 
 			"email":      user.Email,
 			"activated":  user.Activated,
 			"version":    user.Version,
+			"name":       user.Name,
 		})
-		fmt.Println(err)
+		//fmt.Println(err)
+		return err
+	case *UserPermissionsSend:
+		dates := data.(*UserPermissionsSend)
+		coll = m.DB.Collection("permissions")
+		var input struct {
+			Id   int64    `json:"id"`
+			Code []string `json:"code"`
+		}
+		err := coll.FindOne(ctx, bson.M{"code": bson.M{"$in": dates.Codes}}).Decode(&input)
+		if err != nil {
+			return err
+		}
+		fmt.Println(input.Id)
+		fmt.Println(input)
+		coll = m.DB.Collection("user_permissions")
+		_, err = coll.InsertOne(ctx, bson.M{"user_id": dates.User_Id, "permissions_id": input.Id})
 		return err
 	}
 	_, err := coll.InsertOne(ctx, data)
@@ -142,6 +159,32 @@ func (m *MongoDb) Get(ctx context.Context, _ string, id interface{}, collection 
 			return nil, err
 		}
 		return result, nil
+	} else if collection == "permissions" {
+		coll = m.DB.Collection("user_permissions")
+		var res struct {
+			User_id        int64 `json:"user_id"`
+			Permissions_id int64 `json:"permissions_id"`
+		}
+		err := coll.FindOne(ctx, bson.M{"user_id": id}).Decode(&res)
+
+		if err != nil {
+			return nil, err
+		}
+
+		coll = m.DB.Collection("permissions")
+
+		var result struct {
+			ID   int64       `json:"id"`
+			Code Permissions `json:"code"`
+		}
+
+		err = coll.FindOne(ctx, bson.M{"id": res.Permissions_id}).Decode(&result)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return result.Code, nil
 	}
 
 	return nil, errors.New("No collections in database")
