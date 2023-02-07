@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
@@ -95,7 +94,6 @@ func (m UserModel) Insert(user *User) error {
 	defer cancel()
 
 	id, err := m.DB.GetLastId(ctx, "", "users")
-	fmt.Println(err)
 
 	if err != nil {
 		return err
@@ -106,7 +104,6 @@ func (m UserModel) Insert(user *User) error {
 	user.CreatedAt = time.Now()
 
 	err = m.DB.Insert(ctx, "", "users", user)
-	fmt.Println(err)
 
 	if err != nil {
 		switch {

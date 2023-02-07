@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -45,21 +44,33 @@ func (m *MongoDb) Insert(ctx context.Context, _ string, collection string, data 
 		})
 		//fmt.Println(err)
 		return err
-	case *UserPermissionsSend:
-		dates := data.(*UserPermissionsSend)
+	case UserPermissionsSend:
+		dates := data.(UserPermissionsSend)
 		coll = m.DB.Collection("permissions")
-		var input struct {
-			Id   int64    `json:"id"`
-			Code []string `json:"code"`
+		var input []struct {
+			Id   int64  `json:"id"`
+			Code string `json:"code"`
 		}
-		err := coll.FindOne(ctx, bson.M{"code": bson.M{"$in": dates.Codes}}).Decode(&input)
+		cursor, err := coll.Find(ctx, bson.M{"code": bson.M{"$in": dates.Codes}})
 		if err != nil {
 			return err
 		}
-		fmt.Println(input.Id)
-		fmt.Println(input)
+
+		if err = cursor.All(ctx, &input); err != nil {
+			return err
+		}
+
+		//fmt.Println(input[0].Id)
+		//fmt.Println(input[0])
 		coll = m.DB.Collection("user_permissions")
-		_, err = coll.InsertOne(ctx, bson.M{"user_id": dates.User_Id, "permissions_id": input.Id})
+
+		for i := 0; i < len(input); i++ {
+			_, err = coll.InsertOne(ctx, bson.M{"user_id": dates.User_Id, "permissions_id": input[0].Id})
+			if err != nil {
+				return err
+			}
+		}
+
 		return err
 	}
 	_, err := coll.InsertOne(ctx, data)
@@ -161,30 +172,38 @@ func (m *MongoDb) Get(ctx context.Context, _ string, id interface{}, collection 
 		return result, nil
 	} else if collection == "permissions" {
 		coll = m.DB.Collection("user_permissions")
-		var res struct {
+		var res []struct {
 			User_id        int64 `json:"user_id"`
 			Permissions_id int64 `json:"permissions_id"`
 		}
-		err := coll.FindOne(ctx, bson.M{"user_id": id}).Decode(&res)
+		cursor, err := coll.Find(ctx, bson.M{"user_id": id})
 
 		if err != nil {
+			return nil, err
+		}
+
+		if err = cursor.All(ctx, &res); err != nil {
 			return nil, err
 		}
 
 		coll = m.DB.Collection("permissions")
 
-		var result struct {
-			ID   int64       `json:"id"`
-			Code Permissions `json:"code"`
+		var permissions Permissions
+		for i := 0; i < len(res); i++ {
+			var result struct {
+				ID   int64  `json:"id"`
+				Code string `json:"code"`
+			}
+
+			err = coll.FindOne(ctx, bson.M{"id": res[i].Permissions_id}).Decode(&result)
+			if err != nil {
+				return nil, err
+			}
+
+			permissions = append(permissions, result.Code)
 		}
 
-		err = coll.FindOne(ctx, bson.M{"id": res.Permissions_id}).Decode(&result)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return result.Code, nil
+		return permissions, nil
 	}
 
 	return nil, errors.New("No collections in database")
