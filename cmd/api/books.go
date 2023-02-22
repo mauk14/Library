@@ -79,7 +79,7 @@ func (app *application) showBookHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) updateBookHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := app.readIDParam(r)
 	if err != nil {
 		app.notFoundResponse(w, r)
@@ -155,7 +155,7 @@ func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) deleteBookHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := app.readIDParam(r)
 	if err != nil {
 		app.notFoundResponse(w, r)
@@ -179,7 +179,7 @@ func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (app *application) listMoviesHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) listBooksHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Title  string
 		Author string
